@@ -4,14 +4,14 @@
   <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
 </p>
 
-<p align="center">A modern authentication API built with NestJS, featuring user registration, login, and JWT-based authentication with PostgreSQL database.</p>
+<p align="center">A modern authentication API built with NestJS, featuring user registration, login, and JWT-based authentication with Supabase PostgreSQL database.</p>
 
 ## 🚀 Features
 
 - **User Authentication**: Complete signup and login system
 - **JWT Authentication**: Secure token-based authentication
 - **Password Hashing**: Bcrypt encryption for password security
-- **Database Integration**: PostgreSQL with Prisma ORM
+- **Database Integration**: Supabase PostgreSQL with Prisma ORM
 - **Input Validation**: Class-validator for request validation
 - **CORS Support**: Configured for frontend integration
 - **TypeScript**: Full TypeScript support for type safety
@@ -22,7 +22,7 @@ Before running this project, make sure you have the following installed:
 
 - **Node.js** (v18 or higher)
 - **npm** or **yarn**
-- **PostgreSQL** (v13 or higher)
+- **Supabase PostgreSQL** (or local PostgreSQL v13 or higher)
 
 ## 🛠️ Setup Instructions
 
@@ -30,7 +30,7 @@ Before running this project, make sure you have the following installed:
 
 ```bash
 git clone <repository-url>
-cd acme-demo/backend
+cd acme-backend
 ```
 
 ### 2. Install Dependencies
@@ -44,44 +44,20 @@ npm install
 Create a `.env` file in the root directory with the following variables:
 
 ```env
-# Database Configuration
-DATABASE_URL="postgresql://username:password@localhost:5432/acme_demo?schema=public"
-DIRECT_URL="postgresql://username:password@localhost:5432/acme_demo?schema=public"
+# Database Configuration (Supabase PostgreSQL)
+DATABASE_URL="Your_transaction_pooler_supabase_postgre_url"
+DIRECT_URL="Your_session_pooler_supabase_postgre_url"
 
 # JWT Configuration
 JWT_SECRET="your-super-secret-jwt-key-here"
-JWT_EXPIRES_IN="7d"
 
-# Server Configuration
-PORT=3000
-NODE_ENV=development
+# Frontend Configuration
+FRONTEND_URL=Your_frontend_deploy_url
 ```
 
-**Required Environment Variables:**
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string for Prisma | `postgresql://user:pass@localhost:5432/db` |
-| `DIRECT_URL` | Direct database connection (same as DATABASE_URL) | `postgresql://user:pass@localhost:5432/db` |
-| `JWT_SECRET` | Secret key for JWT token signing | `your-secret-key` |
-| `JWT_EXPIRES_IN` | JWT token expiration time | `7d`, `24h`, `60m` |
-| `PORT` | Server port (optional, defaults to 3000) | `3000` |
-| `NODE_ENV` | Environment mode | `development`, `production` |
 
 ### 4. Database Setup
-
-#### Create PostgreSQL Database
-
-```bash
-# Connect to PostgreSQL
-psql -U postgres
-
-# Create database
-CREATE DATABASE acme_demo;
-
-# Exit psql
-\q
-```
 
 #### Run Database Migrations
 
@@ -186,27 +162,6 @@ prisma/
 └── migrations/             # Database migrations
 ```
 
-## 🔧 Development Scripts
-
-```bash
-# Development
-npm run start:dev          # Start with hot reload
-npm run start:debug        # Start in debug mode
-
-# Building
-npm run build              # Build for production
-npm run start:prod         # Start production build
-
-# Database
-npx prisma generate        # Generate Prisma client
-npx prisma migrate dev     # Run migrations
-npx prisma studio          # Open Prisma Studio
-npx prisma db seed         # Seed database
-
-# Code Quality
-npm run lint               # Run ESLint
-npm run format             # Format code with Prettier
-```
 
 ## 🗄️ Database Schema
 
@@ -252,27 +207,6 @@ model User {
    npm run start:prod
    ```
 
-### Docker Deployment (Optional)
-
-Create a `Dockerfile`:
-
-```dockerfile
-FROM node:18-alpine
-
-WORKDIR /app
-
-COPY package*.json ./
-RUN npm ci --only=production
-
-COPY dist ./dist
-COPY prisma ./prisma
-
-RUN npx prisma generate
-
-EXPOSE 3000
-
-CMD ["npm", "run", "start:prod"]
-```
 
 ## 📊 Assumptions & Trade-offs
 
@@ -332,26 +266,5 @@ Enable debug mode for detailed logging:
 npm run start:debug
 ```
 
-## 📞 Support
 
-For issues and questions:
 
-1. Check the [NestJS Documentation](https://docs.nestjs.com/)
-2. Review [Prisma Documentation](https://www.prisma.io/docs/)
-3. Check existing issues in the repository
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
----
-
-**Built with ❤️ using NestJS, Prisma, and PostgreSQL**

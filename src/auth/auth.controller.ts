@@ -1,28 +1,25 @@
-import { Controller, Get, Post, Body, UseGuards, Request } from '@nestjs/common';
-import { CreateAuthSignupDto } from './create-auth-signup-dto';
+import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
-import { CreateAuthLoginDTO } from './create-auth-login-dto';
-import { AuthGuard } from './auth.guard';
+import { Public } from './decorators/public.decorator';
+import { LoginDto } from './dto/login.dto';
+import { SignUpDto } from './dto/sign-up.dto';
 
-@Controller()
+// Stricter limit than the global one to slow down credential stuffing.
+@Throttle({ default: { limit: 5, ttl: 60_000 } })
+@Public()
+@Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private readonly auth: AuthService) {}
 
-  // POST /auth/signup
-  @Post('/auth/signup')
-  async create(@Body() createAuthSignupDto: CreateAuthSignupDto) {
-    return await this.authService.signup(createAuthSignupDto);
+  @Post('signup')
+  signup(@Body() dto: SignUpDto) {
+    return this.auth.signup(dto);
   }
 
-  // POST /auth/login
-  @Post('/auth/login')
-  async login(@Body() createAuthLoginDTO: CreateAuthLoginDTO) {
-    return await this.authService.login(createAuthLoginDTO);
-  }
-  // GET /me (authenticated route)
-  @UseGuards(AuthGuard)
-  @Get('me')
-  getProfile(@Request() req) {
-    return req.user;
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  login(@Body() dto: LoginDto) {
+    return this.auth.login(dto);
   }
 }

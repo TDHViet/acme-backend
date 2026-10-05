@@ -1,78 +1,48 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
-import { CreateAuthSignupDto } from './create-auth-signup-dto';
-import { SignUpResponse } from './SignUp';
-import * as bcrypt from 'bcrypt';
-import { PrismaService } from '../prisma.service';
-import { CreateAuthLoginDTO } from './create-auth-login-dto';
+import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { Prisma } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
+import { UsersService, type PublicUser } from '../users/users.service';
+import type { JwtPayload } from './auth.types';
+import type { LoginDto } from './dto/login.dto';
+import type { SignUpDto } from './dto/sign-up.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly bcryptRounds: number;
+  // Compared against when the email is unknown so both failure paths take the same time.
+  private readonly dummyHash: Promise<string>;
+
   constructor(
-    private prisma: PrismaService,
-    private jwtService: JwtService,
-  ) {}
-  async encryptPassword(plainText, saltRounds) {
-    return await bcrypt.hash(plainText, saltRounds);
+    private readonly users: UsersService,
+    private readonly jwt: JwtService,
+    config: ConfigService,
+  ) {
+    this.bcryptRounds = config.getOrThrow<number>('BCRYPT_ROUNDS');
+    this.dummyHash = bcrypt.hash('timing-equalizer', this.bcryptRounds);
   }
-  async decryptPassword(plainText, hash) {
-    return await bcrypt.compare(plainText, hash);
+
+  async signup({ name, email, password }: SignUpDto): Promise<PublicUser> {
+    const passwordHash = await bcrypt.hash(password, this.bcryptRounds);
+    try {
+      return await this.users.create({ name, email, passwordHash });
+    } catch (e) {
+      // Rely on the unique index instead of a findFirst pre-check, which races under concurrent signups.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException('Email is already registered');
+      }
+      throw e;
+    }
   }
-  async signup(payload: CreateAuthSignupDto): Promise<SignUpResponse> {
-    const existingUser = await this.prisma.user.findFirst({
-      where: { email: payload.email },
-    });
-    if (existingUser) {
-      throw new BadRequestException('User with this email already exists', {
-        cause: new Error(),
-        description: 'Duplicate email',
-      });
-    }
-    // save the password in encrypted format - bycrypt
-    const hashedPassword = await this.encryptPassword(payload.password, 10);
-    // save the user in db with proper field mapping
-    return await this.prisma.user.create({
-      data: {
-        name: payload.name,
-        email: payload.email,
-        passwordHash: hashedPassword,
-      },
-      select: {
-        email: true,
-        name: true,
-        id: true,
-      },
-    });
-  }
-  async login(createAuthLoginDTO: CreateAuthLoginDTO): Promise<{accessToken:string}>{
-    // Find user by email
-    const user = await this.prisma.user.findFirst({
-      where: { email: createAuthLoginDTO.email },
-    });
-    // If user not found, throw error
-    if (!user) {
-      throw new UnauthorizedException({
-        cause: new Error(),
-        description: 'User not found',
-      });
-    }
-    //decrypt the password and compare
-    const isPasswordValid = await this.decryptPassword(
-      createAuthLoginDTO.password,
-      user.passwordHash,
-    );
-    // if password is invalid, throw error
-    if (!isPasswordValid) {
-      throw new UnauthorizedException({
-        cause: new Error(),
-        description: 'Invalid password',
-      });
-    }
-    // return user details (without passwordHash)
-    const accessToken = await this.jwtService.signAsync(
-      { id: user.id, email: user.email },
-      { expiresIn: '1h' },
-    );
-    return {accessToken};
+
+  async login({ email, password }: LoginDto): Promise<{ accessToken: string }> {
+    const user = await this.users.findByEmail(email);
+    const valid = await bcrypt.compare(password, user?.passwordHash ?? (await this.dummyHash));
+    // Same message for unknown email and wrong password to avoid leaking which emails exist.
+    if (!user || !valid) throw new UnauthorizedException('Invalid email or password');
+
+    const payload: JwtPayload = { sub: user.id, email: user.email };
+    return { accessToken: await this.jwt.signAsync(payload) };
   }
 }

@@ -41,21 +41,17 @@ npm install
 
 ### 3. Environment Variables Setup
 
-Create a `.env` file in the root directory with the following variables:
+Copy `.env.example` to `.env` and fill it in. The app validates these on startup and refuses to boot if any are missing or invalid.
 
-```env
-# Database Configuration (Supabase PostgreSQL)
-DATABASE_URL="Your_transaction_pooler_supabase_postgre_url"
-DIRECT_URL="Your_session_pooler_supabase_postgre_url"
-
-# JWT Configuration
-JWT_SECRET="your-super-secret-jwt-key-here"
-
-# Frontend Configuration
-FRONTEND_URL=Your_frontend_deploy_url
-```
-
-
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | ✅ | Supabase transaction pooler (port 6543, `?pgbouncer=true`). URL-encode special characters in the password (`@` → `%40`). |
+| `DIRECT_URL` | ✅ | Supabase session pooler (port 5432), used by `prisma migrate`. |
+| `JWT_SECRET` | ✅ | ≥ 32 characters — `openssl rand -base64 48`. |
+| `FRONTEND_URL` | ✅ | Comma-separated allowed CORS origins, e.g. `http://localhost:5173,https://acme.app`. |
+| `JWT_EXPIRES_IN` | | Access token lifetime (default `1h`). |
+| `BCRYPT_ROUNDS` | | bcrypt cost 10–14 (default `12`). |
+| `PORT` | | Default `3000`. |
 
 ### 4. Database Setup
 
@@ -90,13 +86,14 @@ The server will start on `http://localhost:3000` (or the port specified in your 
 
 ## 📚 API Endpoints
 
-### Authentication Endpoints
+All routes require `Authorization: Bearer <token>` unless marked public.
 
-| Method | Endpoint | Description | Body |
-|--------|----------|-------------|------|
-| `POST` | `/auth/signup` | Register a new user | `{ name, email, password }` |
-| `POST` | `/auth/login` | Login existing user | `{ email, password }` |
-| `GET` | `/me` | Get current user profile | Requires JWT token |
+| Method | Endpoint | Auth | Description | Responses |
+|--------|----------|------|-------------|-----------|
+| `GET` | `/health` | Public | Liveness + DB check | `200`, `503` |
+| `POST` | `/auth/signup` | Public, 5 req/min | `{ name, email, password }` (password 8–72 chars) | `201` user, `400`, `409` email taken |
+| `POST` | `/auth/login` | Public, 5 req/min | `{ email, password }` | `200 { accessToken }`, `401`, `429` |
+| `GET` | `/me` | Bearer | Current user from the database | `200 { id, name, email, createdAt }`, `401` |
 
 ### Example Requests
 
@@ -127,41 +124,23 @@ curl -X GET http://localhost:3000/me \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
-## 🧪 Testing
-
-```bash
-# Unit tests
-npm run test
-
-# E2E tests
-npm run test:e2e
-
-# Test coverage
-npm run test:cov
-
-# Watch mode
-npm run test:watch
-```
-
 ## 📦 Project Structure
 
 ```
 src/
-├── auth/                    # Authentication module
-│   ├── auth.controller.ts   # Auth endpoints
-│   ├── auth.service.ts      # Auth business logic
-│   ├── auth.guard.ts        # JWT guard
-│   ├── auth.module.ts       # Auth module
-│   └── *.dto.ts            # Data transfer objects
-├── app.module.ts           # Main application module
-├── main.ts                 # Application entry point
-└── prisma.service.ts       # Prisma database service
-
-prisma/
-├── schema.prisma           # Database schema
-└── migrations/             # Database migrations
+├── auth/
+│   ├── decorators/          # @Public(), @CurrentUser()
+│   ├── dto/                 # SignUpDto, LoginDto (class-validator)
+│   ├── jwt-auth.guard.ts    # Global guard — deny by default
+│   ├── auth.service.ts      # bcrypt + JWT
+│   └── auth.controller.ts   # /auth/signup, /auth/login (rate limited)
+├── users/                   # UsersService + GET /me
+├── health/                  # GET /health
+├── prisma/                  # Global PrismaModule (single connection pool)
+├── config/env.validation.ts # Typed, validated environment
+├── app.module.ts
+└── main.ts                  # helmet, CORS, ValidationPipe
 ```
-
 
 ## 🗄️ Database Schema
 
@@ -180,11 +159,13 @@ model User {
 
 ## 🔒 Security Features
 
-- **Password Hashing**: Uses bcrypt for secure password storage
-- **JWT Authentication**: Stateless authentication with configurable expiration
-- **Input Validation**: Validates all incoming requests
-- **CORS Protection**: Configured CORS for frontend integration
-- **Environment Variables**: Sensitive data stored in environment variables
+- **Deny by default**: a global guard protects every route; public routes opt out with `@Public()`
+- **Password hashing**: bcrypt (configurable cost), 8–72 character passwords
+- **No user enumeration**: identical error and timing for unknown email vs. wrong password
+- **Rate limiting**: 100 req/min globally, 5 req/min on `/auth/*`
+- **Security headers**: helmet
+- **CORS**: explicit origin allow-list from `FRONTEND_URL`
+- **Validated config**: the app refuses to start with a weak `JWT_SECRET` or invalid env
 
 ## 🚀 Deployment
 
